@@ -27,6 +27,38 @@ export const commands = [
         required: false,
         max_length: 200,
       },
+      {
+        name: "model",
+        type: 3,
+        description: "這次使用的模型（會覆蓋預設模型）",
+        required: false,
+        autocomplete: true,
+      },
+    ],
+  },
+  {
+    name: "model",
+    type: 1,
+    description: "管理預設模型",
+    integration_types,
+    contexts,
+    options: [
+      {
+        name: "set",
+        type: 1,
+        description: "設定預設模型",
+        options: [
+          {
+            name: "model",
+            type: 3,
+            description: "從清單選擇模型",
+            required: true,
+            autocomplete: true,
+          },
+        ],
+      },
+      { name: "show", type: 1, description: "顯示目前使用的模型" },
+      { name: "clear", type: 1, description: "改回系統預設模型" },
     ],
   },
   {

@@ -9,6 +9,7 @@ export interface CommandOption {
   name: string;
   type: number;
   value?: string | number | boolean;
+  focused?: boolean;
   options?: CommandOption[];
 }
 

@@ -14,6 +14,7 @@ export const messages = pgTable(
 
 export const userSettings = pgTable("user_settings", {
   userId: text("user_id").primaryKey(),
-  style: text("style").notNull(),
+  style: text("style"),
+  model: text("model"),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
