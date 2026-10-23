@@ -3,6 +3,7 @@ import { InteractionResponseType, InteractionType } from "discord-interactions";
 import { eq } from "drizzle-orm";
 import { chat, contextKey } from "@/lib/chat";
 import { MESSAGE_COMMAND_NAME } from "@/lib/commands";
+import { classifyError, userFacingMessage } from "@/lib/errors";
 import { db } from "@/lib/db";
 import { messages, userSettings } from "@/lib/db/schema";
 import {
@@ -244,7 +245,7 @@ export async function POST(req: Request) {
       text = await handler.run();
     } catch (err) {
       console.error("handler failed", err);
-      text = "處理時發生錯誤，請稍後再試。";
+      text = userFacingMessage(classifyError(err));
     }
     await sendResult(
       interaction.application_id,

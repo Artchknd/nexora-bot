@@ -1,7 +1,10 @@
 import { desc, eq } from "drizzle-orm";
 import { db } from "./db";
 import { messages, userSettings } from "./db/schema";
-import { DEFAULT_MODEL, generateReply } from "./gemini";
+import { getGlobalStyle } from "./app-settings";
+import { classifyError } from "./errors";
+import { DEFAULT_MODEL, generateReply, type Turn } from "./gemini";
+import { logUsage } from "./usage";
 
 const HISTORY_LIMIT = 20;
 
@@ -17,6 +20,40 @@ function isModelGone(err: unknown): boolean {
   );
 }
 
+// one Gemini call, recorded in usage_logs whether it succeeds or fails
+async function callGemini(
+  userId: string,
+  model: string,
+  history: Turn[],
+  prompt: string,
+  style: string | null | undefined,
+): Promise<string> {
+  const started = Date.now();
+  try {
+    const { text, usage } = await generateReply(history, prompt, style, model);
+    await logUsage({
+      userId,
+      model,
+      ok: true,
+      latencyMs: Date.now() - started,
+      ...usage,
+    });
+    return text;
+  } catch (err) {
+    const info = classifyError(err);
+    await logUsage({
+      userId,
+      model,
+      ok: false,
+      httpStatus: info.status,
+      errorKind: info.kind,
+      errorMessage: info.raw.slice(0, 500),
+      latencyMs: Date.now() - started,
+    });
+    throw err;
+  }
+}
+
 export async function chat(opts: {
   userId: string;
   channelId: string;
@@ -26,10 +63,10 @@ export async function chat(opts: {
 }): Promise<string> {
   const key = contextKey(opts.userId, opts.channelId);
 
-  const [setting] = await db
-    .select()
-    .from(userSettings)
-    .where(eq(userSettings.userId, opts.userId));
+  const [[setting], globalStyle] = await Promise.all([
+    db.select().from(userSettings).where(eq(userSettings.userId, opts.userId)),
+    getGlobalStyle(),
+  ]);
 
   const rows = await db
     .select()
@@ -42,17 +79,18 @@ export async function chat(opts: {
     .reverse()
     .map((r) => ({ role: r.role, content: r.content }));
 
-  const style = opts.styleOverride ?? setting?.style;
+  // 優先順序：/ask 的臨時風格 > 個人風格 > 全域風格
+  const style = opts.styleOverride ?? setting?.style ?? globalStyle;
   const model = opts.modelOverride ?? setting?.model ?? DEFAULT_MODEL;
 
   let reply: string;
   let note = "";
   try {
-    reply = await generateReply(history, opts.prompt, style, model);
+    reply = await callGemini(opts.userId, model, history, opts.prompt, style);
   } catch (err) {
     // 所選模型被下架時，自動退回預設模型，避免整個 Bot 掛掉
     if (isModelGone(err) && model !== DEFAULT_MODEL) {
-      reply = await generateReply(history, opts.prompt, style, DEFAULT_MODEL);
+      reply = await callGemini(opts.userId, DEFAULT_MODEL, history, opts.prompt, style);
       note = `(模型 ${model} 已無法使用，這次改用 ${DEFAULT_MODEL}。可用 /model set 重新選擇。)\n\n`;
     } else {
       throw err;

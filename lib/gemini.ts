@@ -49,12 +49,24 @@ export interface Turn {
   content: string;
 }
 
+export interface TokenUsage {
+  promptTokens: number;
+  outputTokens: number;
+  thoughtTokens: number;
+  totalTokens: number;
+}
+
+export interface ReplyResult {
+  text: string;
+  usage: TokenUsage;
+}
+
 export async function generateReply(
   history: Turn[],
   prompt: string,
   style: string | null | undefined,
   model: string,
-): Promise<string> {
+): Promise<ReplyResult> {
   const systemInstruction = style
     ? `${BASE_INSTRUCTION}\n\n回答風格：${style}`
     : BASE_INSTRUCTION;
@@ -69,5 +81,16 @@ export async function generateReply(
     config: { systemInstruction, maxOutputTokens: 1500 },
   });
 
-  return res.text?.trim() || "(模型沒有回傳內容，可能被安全機制擋下，換個說法試試)";
+  const u = res.usageMetadata;
+  const usage: TokenUsage = {
+    promptTokens: u?.promptTokenCount ?? 0,
+    outputTokens: u?.candidatesTokenCount ?? 0,
+    thoughtTokens: u?.thoughtsTokenCount ?? 0,
+    totalTokens: u?.totalTokenCount ?? 0,
+  };
+
+  return {
+    text: res.text?.trim() || "(模型沒有回傳內容，可能被安全機制擋下，換個說法試試)",
+    usage,
+  };
 }
