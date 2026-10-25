@@ -6,10 +6,18 @@ import { classifyError } from "./errors";
 import { DEFAULT_MODEL, generateReply, type Turn } from "./gemini";
 import { logUsage } from "./usage";
 
-const HISTORY_LIMIT = 20;
+// window: last N messages, further trimmed to a character budget (oldest dropped first)
+const HISTORY_LIMIT = 30;
+const HISTORY_CHAR_BUDGET = 16_000;
 
-export function contextKey(userId: string, channelId: string) {
-  return `${userId}:${channelId}`;
+// One memory per channel, shared by everyone in it. Without a channel id (should not
+// happen, but a shared fallback would leak between people) fall back to a per-user key.
+export function contextKey(channelId: string | undefined, userId: string) {
+  return channelId ?? `dm:${userId}`;
+}
+
+function labeled(name: string | null, content: string) {
+  return name ? `${name}：${content}` : content;
 }
 
 function isModelGone(err: unknown): boolean {
@@ -57,13 +65,14 @@ async function callGemini(
 
 export async function chat(opts: {
   userId: string;
-  channelId: string;
+  userName: string;
+  channelId?: string;
   prompt: string;
   styleOverride?: string;
   modelOverride?: string;
   search?: boolean;
 }): Promise<string> {
-  const key = contextKey(opts.userId, opts.channelId);
+  const key = contextKey(opts.channelId, opts.userId);
 
   const [[setting], globalStyle] = await Promise.all([
     db.select().from(userSettings).where(eq(userSettings.userId, opts.userId)),
@@ -77,9 +86,17 @@ export async function chat(opts: {
     .orderBy(desc(messages.id))
     .limit(HISTORY_LIMIT);
 
-  const history = rows
-    .reverse()
-    .map((r) => ({ role: r.role, content: r.content }));
+  let history: Turn[] = rows.reverse().map((r) => ({
+    role: r.role,
+    content: r.role === "user" ? labeled(r.authorName, r.content) : r.content,
+  }));
+
+  let total = history.reduce((n, t) => n + t.content.length, 0);
+  while (history.length > 0 && (total > HISTORY_CHAR_BUDGET || history[0].role === "model")) {
+    total -= history[0].content.length;
+    history = history.slice(1);
+  }
+  const prompt = labeled(opts.userName, opts.prompt);
 
   // 優先順序：/ask 的臨時風格 > 個人風格 > 全域風格
   const style = opts.styleOverride ?? setting?.style ?? globalStyle;
@@ -90,11 +107,11 @@ export async function chat(opts: {
   let reply: string;
   let note = "";
   try {
-    reply = await callGemini(opts.userId, model, history, opts.prompt, style, search);
+    reply = await callGemini(opts.userId, model, history, prompt, style, search);
   } catch (err) {
     // 所選模型被下架時，自動退回預設模型，避免整個 Bot 掛掉
     if (isModelGone(err) && model !== DEFAULT_MODEL) {
-      reply = await callGemini(opts.userId, DEFAULT_MODEL, history, opts.prompt, style, search);
+      reply = await callGemini(opts.userId, DEFAULT_MODEL, history, prompt, style, search);
       note = `(模型 ${model} 已無法使用，這次改用 ${DEFAULT_MODEL}。可用 /model set 重新選擇。)\n\n`;
     } else {
       throw err;
@@ -102,7 +119,13 @@ export async function chat(opts: {
   }
 
   await db.insert(messages).values([
-    { contextKey: key, role: "user", content: opts.prompt },
+    {
+      contextKey: key,
+      role: "user",
+      content: opts.prompt,
+      authorId: opts.userId,
+      authorName: opts.userName,
+    },
     { contextKey: key, role: "model", content: reply },
   ]);
 

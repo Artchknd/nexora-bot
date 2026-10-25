@@ -7,6 +7,9 @@ export const messages = pgTable(
     contextKey: text("context_key").notNull(),
     role: text("role").$type<"user" | "model">().notNull(),
     content: text("content").notNull(),
+    // who spoke; null on model rows
+    authorId: text("author_id"),
+    authorName: text("author_name"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
   },
   (t) => [index("messages_context_idx").on(t.contextKey, t.id)],
@@ -44,3 +47,10 @@ export const usageLogs = pgTable(
   },
   (t) => [index("usage_logs_user_idx").on(t.userId, t.createdAt)],
 );
+
+// people who @ the bot without being on the whitelist (see lib/non-whitelist.ts)
+export const nonWhitelistHits = pgTable("non_whitelist_hits", {
+  userId: text("user_id").primaryKey(),
+  count: integer("count").notNull().default(0),
+  lastAt: timestamp("last_at").defaultNow().notNull(),
+});

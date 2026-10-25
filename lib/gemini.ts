@@ -12,6 +12,9 @@ const TIMEZONE = process.env.BOT_TIMEZONE ?? "Asia/Taipei";
 const TIMEOUT_MS = 35_000;
 const SEARCH_TIMEOUT_MS = 50_000;
 
+const MULTI_USER_INSTRUCTION =
+  "這是多人共用的對話：每則使用者訊息開頭會標示「名稱：」，代表是誰說的。請分辨不同人說了什麼，針對最後那位提問的人回答。你自己的回覆不要加名稱前綴。";
+
 const BASE_INSTRUCTION =
   "你是 Discord 上的 AI 助理。預設用使用者提問的語言回答，內容簡潔、適合在聊天室閱讀。";
 
@@ -96,7 +99,7 @@ export async function generateReply(
   search = false,
 ): Promise<ReplyResult> {
   // the time goes into the system prompt only, never into the stored history
-  let systemInstruction = `${BASE_INSTRUCTION}\n\n${currentTimeLine()}`;
+  let systemInstruction = `${BASE_INSTRUCTION}\n\n${MULTI_USER_INSTRUCTION}\n\n${currentTimeLine()}`;
   if (style) systemInstruction += `\n\n回答風格：${style}`;
 
   const contents = [...history, { role: "user" as const, content: prompt }].map(

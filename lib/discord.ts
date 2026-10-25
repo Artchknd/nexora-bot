@@ -13,13 +13,19 @@ export interface CommandOption {
   options?: CommandOption[];
 }
 
+export interface DiscordUser {
+  id: string;
+  username?: string;
+  global_name?: string | null;
+}
+
 export interface Interaction {
   type: number;
   token: string;
   application_id: string;
   channel_id?: string;
-  member?: { user: { id: string } };
-  user?: { id: string };
+  member?: { nick?: string | null; user: DiscordUser };
+  user?: DiscordUser;
   data?: {
     name: string;
     type?: number;
@@ -43,6 +49,12 @@ export async function verifyRequest(
     process.env.DISCORD_PUBLIC_KEY!,
   );
   return { ok, body };
+}
+
+// server nickname > global display name > username
+export function displayName(i: Interaction): string {
+  const u = i.member?.user ?? i.user;
+  return i.member?.nick || u?.global_name || u?.username || "unknown";
 }
 
 export function isAllowed(userId: string): boolean {

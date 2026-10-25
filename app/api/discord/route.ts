@@ -8,6 +8,7 @@ import { db } from "@/lib/db";
 import { messages, userSettings } from "@/lib/db/schema";
 import {
   EPHEMERAL,
+  displayName,
   getBooleanOption,
   getOption,
   isAllowed,
@@ -82,7 +83,8 @@ async function autocompleteResponse(i: Interaction) {
 function resolveHandler(i: Interaction, userId: string): Handler | null {
   const data = i.data;
   if (!data) return null;
-  const channelId = i.channel_id ?? "dm";
+  const channelId = i.channel_id;
+  const userName = displayName(i);
 
   // 訊息右鍵 / 長按選單：Apps -> Ask Nexora
   if (data.type === 3 && data.name === MESSAGE_COMMAND_NAME) {
@@ -96,6 +98,7 @@ function resolveHandler(i: Interaction, userId: string): Handler | null {
         text
           ? chat({
               userId,
+              userName,
               channelId,
               prompt: `請回應或說明下面這則訊息：\n\n${text}`,
             })
@@ -115,6 +118,7 @@ function resolveHandler(i: Interaction, userId: string): Handler | null {
         run: async () =>
           `${quoteBlock(question)}\n\n${await chat({
             userId,
+            userName,
             channelId,
             prompt: question,
             styleOverride,
@@ -173,8 +177,8 @@ function resolveHandler(i: Interaction, userId: string): Handler | null {
         run: async () => {
           await db
             .delete(messages)
-            .where(eq(messages.contextKey, contextKey(userId, channelId)));
-          return "已清除這個頻道的對話記憶。";
+            .where(eq(messages.contextKey, contextKey(channelId, userId)));
+          return "已清除這個頻道的對話記憶（這個頻道所有人共用的那一份）。";
         },
       };
 
