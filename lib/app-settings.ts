@@ -26,6 +26,17 @@ export async function setGlobalStyle(value: string | null): Promise<void> {
 export const WORKER_HEARTBEAT_KEY = "worker_heartbeat";
 const HEARTBEAT_FRESH_MS = 90_000;
 
+export async function setWorkerHeartbeat(online: boolean): Promise<void> {
+  const value = online ? String(Date.now()) : "0";
+  await db
+    .insert(appSettings)
+    .values({ key: WORKER_HEARTBEAT_KEY, value })
+    .onConflictDoUpdate({
+      target: appSettings.key,
+      set: { value, updatedAt: new Date() },
+    });
+}
+
 export async function isWorkerOnline(): Promise<boolean> {
   try {
     const [row] = await db

@@ -1,3 +1,4 @@
+import { isWorkerOnline } from "@/lib/app-settings";
 import {
   checkDiscord,
   checkGemini,
@@ -8,7 +9,11 @@ import {
 export const dynamic = "force-dynamic";
 
 export default async function OverviewPage() {
-  const [discord, gemini] = await Promise.all([checkDiscord(), checkGemini()]);
+  const [discord, gemini, workerOnline] = await Promise.all([
+    checkDiscord(),
+    checkGemini(),
+    isWorkerOnline(),
+  ]);
   const envs = envStatus();
   const missing = envs.filter((e) => !e.set).length;
 
@@ -42,6 +47,18 @@ export default async function OverviewPage() {
           </div>
           <div className="card-value">{whitelistCount()}</div>
           <div className="muted small">來自 ALLOWED_USER_IDS</div>
+        </div>
+
+        <div className="glass card">
+          <div className="card-top">
+            <span className="card-label">@ 模式</span>
+            <span className={`pill ${workerOnline ? "pill-ok" : "pill-warn"}`}>
+              <span className="dot" />
+              {workerOnline ? "開啟中" : "休息中"}
+            </span>
+          </div>
+          <div className="card-value">{workerOnline ? "worker 運作中" : "worker 未啟動"}</div>
+          <div className="muted small">依 worker 心跳判斷，90 秒內有回報即視為開啟</div>
         </div>
 
         <div className="glass card">
