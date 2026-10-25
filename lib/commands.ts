@@ -34,6 +34,12 @@ export const commands = [
         required: false,
         autocomplete: true,
       },
+      {
+        name: "search",
+        type: 5,
+        description: "上網搜尋後再回答（較慢，預設關閉）",
+        required: false,
+      },
     ],
   },
   {

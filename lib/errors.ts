@@ -7,6 +7,7 @@ export type ErrorKind =
   | "auth"
   | "model_gone"
   | "network"
+  | "timeout"
   | "unknown";
 
 export interface ErrorInfo {
@@ -18,11 +19,25 @@ export interface ErrorInfo {
 // who has to act: Google's side, a quota/rate limit, or this bot's own setup
 export type ErrorSide = "google" | "quota" | "config" | "network" | "unknown";
 
+// thrown by lib/gemini.ts when Gemini does not answer within our own deadline
+export class GeminiTimeoutError extends Error {
+  readonly timeoutMs: number;
+  constructor(timeoutMs: number) {
+    super(`Gemini did not respond within ${timeoutMs} ms`);
+    this.name = "GeminiTimeoutError";
+    this.timeoutMs = timeoutMs;
+  }
+}
+
 export function classifyError(err: unknown): ErrorInfo {
   const rawStatus = (err as { status?: unknown } | null)?.status;
   const status = typeof rawStatus === "number" ? rawStatus : null;
   const raw = err instanceof Error ? err.message : String(err);
   const name = err instanceof Error ? err.name : "";
+
+  if (err instanceof GeminiTimeoutError) {
+    return { kind: "timeout", status: null, raw };
+  }
 
   if (status === 429) {
     return { kind: /per\s*day|perday/i.test(raw) ? "daily_quota" : "rate_limit", status, raw };
@@ -56,6 +71,7 @@ export const ERROR_KIND_LABEL: Record<ErrorKind, string> = {
   auth: "金鑰或權限問題",
   model_gone: "模型已下架",
   network: "連線失敗",
+  timeout: "Google 回應逾時",
   unknown: "未知錯誤",
 };
 
@@ -63,6 +79,7 @@ export function errorSide(kind: string | null): ErrorSide {
   switch (kind) {
     case "overloaded":
     case "server_error":
+    case "timeout":
       return "google";
     case "rate_limit":
     case "daily_quota":
@@ -91,7 +108,9 @@ const BODY: Record<ErrorKind, string> = {
     "Gemini 沒有接受這次的請求，可能是內容或設定有問題。可以換個說法再試，如果一直發生請通知管理員。",
   model_gone:
     "目前使用的模型已經無法使用。可以用 /model set 換一個模型，或請管理員檢查預設模型。",
-  network: "連線外部服務時失敗（網路或逾時），請稍後再試一次。",
+  network: "連線外部服務時失敗（網路問題），請稍後再試一次。",
+  timeout:
+    "Google 這次想太久，沒有及時回應，這是 Google 那邊的狀況。請稍後再試一次；如果有開上網搜尋，關掉搜尋再試通常會快很多。",
   unknown: "發生了未預期的錯誤，請稍後再試，如果一直發生請通知管理員。",
 };
 
@@ -101,6 +120,8 @@ export function userFacingMessage(info: ErrorInfo): string {
       ? `HTTP ${info.status}`
       : info.kind === "network"
         ? "連線錯誤"
-        : "錯誤代碼不明";
+        : info.kind === "timeout"
+          ? "逾時"
+          : "錯誤代碼不明";
   return `${BODY[info.kind]}（${code}）`;
 }

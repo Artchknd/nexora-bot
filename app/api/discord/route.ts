@@ -8,6 +8,7 @@ import { db } from "@/lib/db";
 import { messages, userSettings } from "@/lib/db/schema";
 import {
   EPHEMERAL,
+  getBooleanOption,
   getOption,
   isAllowed,
   sendResult,
@@ -18,6 +19,15 @@ import {
 import { DEFAULT_MODEL, listChatModels } from "@/lib/gemini";
 
 export const maxDuration = 60;
+
+const QUOTE_MAX = 150;
+
+// "> question" line placed above the answer, so the channel shows what was asked
+function quoteBlock(question: string): string {
+  const flat = question.replace(/\s+/g, " ").replace(/`/g, "'").trim();
+  const shown = flat.length > QUOTE_MAX ? `${flat.slice(0, QUOTE_MAX)}...` : flat;
+  return `> ${shown}`;
+}
 
 interface Handler {
   ephemeral: boolean;
@@ -99,16 +109,18 @@ function resolveHandler(i: Interaction, userId: string): Handler | null {
       if (!question) return null;
       const styleOverride = getOption(data.options, "style");
       const modelOverride = getOption(data.options, "model");
+      const search = getBooleanOption(data.options, "search");
       return {
         ephemeral: false,
-        run: () =>
-          chat({
+        run: async () =>
+          `${quoteBlock(question)}\n\n${await chat({
             userId,
             channelId,
             prompt: question,
             styleOverride,
             modelOverride,
-          }),
+            search,
+          })}`,
       };
     }
 

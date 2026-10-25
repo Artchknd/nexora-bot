@@ -61,6 +61,13 @@ export function getOption(
   return typeof v === "string" ? v : undefined;
 }
 
+export function getBooleanOption(
+  options: CommandOption[] | undefined,
+  name: string,
+): boolean {
+  return options?.find((o) => o.name === name)?.value === true;
+}
+
 function splitMessage(text: string, limit = MAX_LEN): string[] {
   const chunks: string[] = [];
   let rest = text;
